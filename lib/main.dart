@@ -1,12 +1,9 @@
-
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/home_screen.dart';
 
 Future<void> main() async {
   // Ensure that plugin services are initialized so that `video_player` works on desktop.
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
