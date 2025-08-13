@@ -86,7 +86,7 @@ class ApiService {
     // The episode slug from the detail endpoint might have leading/trailing slashes.
     final cleanEpisodeSlug = episodeSlug.replaceAll(RegExp(r'^/|/\$'), '');
 
-    final url = Uri.https(_baseUrl, '/anime/\$animeSlug/episode/\$cleanEpisodeSlug');
+    final url = Uri.https(_baseUrl, "/anime/$animeSlug/episode/$cleanEpisodeSlug");
 
     final response = await http.get(
       url,
