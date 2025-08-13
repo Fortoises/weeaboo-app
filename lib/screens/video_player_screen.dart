@@ -1,6 +1,6 @@
-
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../models/episode_stream.dart';
 import '../services/api_service.dart';
@@ -31,6 +31,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Set preferred orientations to landscape
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+
     _episodeStreamFuture = ApiService().getEpisodeStream(widget.animeSlug, widget.episodeSlug);
     _episodeStreamFuture.then((data) {
       if (data.streams.isNotEmpty) {
@@ -51,7 +58,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
 
-    _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(stream.url));
+    // Prepare headers, especially for Google Video URLs.
+    final Map<String, String> httpHeaders = {};
+    if (stream.url.contains('googlevideo.com')) {
+      httpHeaders['Referer'] = 'https://www.blogger.com/';
+    }
+
+    _videoPlayerController = VideoPlayerController.networkUrl(
+      Uri.parse(stream.url),
+      httpHeaders: httpHeaders,
+    );
+    
     _chewieController = ChewieController(
       videoPlayerController: _videoPlayerController!,
       autoPlay: true,
@@ -108,6 +125,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
+    // Reset preferred orientations to default
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
     super.dispose();
