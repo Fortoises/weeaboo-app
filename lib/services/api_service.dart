@@ -14,7 +14,7 @@ class ApiService {
       throw Exception("API Key not found");
     }
 
-    final url = Uri.https(_baseUrl, '/home/');
+    final url = Uri.https(baseUrl, '/home/');
 
     final response = await http.get(
       url,
@@ -36,7 +36,7 @@ class ApiService {
       throw Exception("API Key not found");
     }
 
-    final url = Uri.https(_baseUrl, '/top10/');
+    final url = Uri.https(baseUrl, '/top10/');
 
     final response = await http.get(
       url,
@@ -62,7 +62,7 @@ class ApiService {
       throw Exception("API Key not found");
     }
 
-    final url = Uri.https(_baseUrl, '/anime/$slug');
+    final url = Uri.https(baseUrl, '/anime/$slug');
 
     final response = await http.get(
       url,
@@ -87,7 +87,7 @@ class ApiService {
     // The episode slug from the detail endpoint might have leading/trailing slashes.
     final cleanEpisodeSlug = episodeSlug.replaceAll(RegExp(r'^/|/\$'), '');
 
-    final url = Uri.https(_baseUrl, "/anime/$animeSlug/episode/$cleanEpisodeSlug");
+    final url = Uri.https(baseUrl, "/anime/$animeSlug/episode/$cleanEpisodeSlug");
 
     final response = await http.get(
       url,
