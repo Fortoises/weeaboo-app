@@ -60,6 +60,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     _videoPlayerController = VideoPlayerController.networkUrl(
       fullUrl,
+      httpHeaders: const {
+        'Referer': 'https://apimy.ldtp.com/',
+      },
     );
     
     _chewieController = ChewieController(
