@@ -1,12 +1,13 @@
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import '../models/anime.dart';
 import '../models/anime_detail.dart';
 import '../models/episode_stream.dart';
 
 class ApiService {
-  final String _baseUrl = "apimy.ldtp.com";
-  final String? _apiKey = "habib123";
+  static const String baseUrl = "apimy.ldtp.com";
+  final String? _apiKey = dotenv.env['API_KEY'];
 
   Future<List<Anime>> getLatestAnime() async {
     if (_apiKey == null) {

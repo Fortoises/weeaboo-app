@@ -32,7 +32,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   void initState() {
     super.initState();
     
-    // Set preferred orientations to landscape
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeRight,
       DeviceOrientation.landscapeLeft,
@@ -41,9 +40,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _episodeStreamFuture = ApiService().getEpisodeStream(widget.animeSlug, widget.episodeSlug);
     _episodeStreamFuture.then((data) {
       if (data.streams.isNotEmpty) {
-        // Prioritize a 720p stream if available, otherwise take the first one.
         final initialStream = data.streams.firstWhere(
-          (s) => s.resolution == '720p',
+          (s) => s.quality == '720p',
           orElse: () => data.streams.first,
         );
         _initializePlayer(initialStream);
@@ -58,15 +56,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
 
-    // Prepare headers, especially for Google Video URLs.
-    final Map<String, String> httpHeaders = {};
-    if (stream.url.contains('googlevideo.com')) {
-      httpHeaders['Referer'] = 'https://www.blogger.com/';
-    }
+    final fullUrl = Uri.https(ApiService.baseUrl, stream.streamUrl);
 
     _videoPlayerController = VideoPlayerController.networkUrl(
-      Uri.parse(stream.url),
-      httpHeaders: httpHeaders,
+      fullUrl,
     );
     
     _chewieController = ChewieController(
@@ -74,6 +67,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       autoPlay: true,
       looping: false,
       aspectRatio: 16 / 9,
+      fullScreenByDefault: true,
+      allowedScreenSleep: false,
       placeholder: const Center(child: CircularProgressIndicator()),
       materialProgressColors: ChewieProgressColors(
         playedColor: const Color(0xFF8A55FE),
@@ -81,11 +76,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         bufferedColor: Colors.grey[600]!,
         backgroundColor: Colors.grey[800]!,
       ),
+      overlay: _buildCustomAppBar(context),
       additionalOptions: (context) {
         return <OptionItem>[
           OptionItem(
             onTap: () {
-              Navigator.pop(context); // Close the options menu
+              Navigator.pop(context);
               _showQualitySelector(context);
             },
             iconData: Icons.hd,
@@ -99,6 +95,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     });
   }
 
+  Widget _buildCustomAppBar(BuildContext context) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                widget.episodeTitle,
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showQualitySelector(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -108,7 +138,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           itemCount: _streams.length,
           itemBuilder: (context, index) {
             final stream = _streams[index];
-            final bool isSelected = stream.url == _currentStream?.url;
+            final bool isSelected = stream.streamUrl == _currentStream?.streamUrl;
             return ListTile(
               title: Text(stream.server, style: TextStyle(color: isSelected ? const Color(0xFF8A55FE) : Colors.white)),
               trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF8A55FE)) : null,
@@ -125,14 +155,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
-    // Reset preferred orientations to default
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeRight,
-      DeviceOrientation.landscapeLeft,
     ]);
-
+    
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
     super.dispose();
@@ -142,10 +169,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(widget.episodeTitle),
-        backgroundColor: Colors.transparent,
-      ),
       body: Center(
         child: FutureBuilder<EpisodeStream>(
           future: _episodeStreamFuture,

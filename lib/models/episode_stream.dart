@@ -9,7 +9,7 @@ class EpisodeStream {
     List<StreamSource> streamList = streamsFromJson != null
         ? streamsFromJson
             .map((i) => StreamSource.fromJson(i))
-            .where((source) => source.url.isNotEmpty) // Filter out empty URLs
+            .where((source) => source.streamUrl.isNotEmpty) // Filter out empty URLs
             .toList()
         : [];
 
@@ -22,25 +22,17 @@ class EpisodeStream {
 
 class StreamSource {
   final String server;
-  final String url;
-  final String resolution;
+  final String streamUrl;
+  final String quality;
 
-  StreamSource({required this.server, required this.url, required this.resolution});
+  StreamSource({required this.server, required this.streamUrl, required this.quality});
 
   factory StreamSource.fromJson(Map<String, dynamic> json) {
-    // The API provides 'direct_url' and 'embed_url'. Prioritize 'direct_url'.
-    final String url = json['direct_url'] ?? json['embed_url'] ?? '';
     return StreamSource(
       server: json['server'] ?? 'Unknown Server',
-      url: url,
-      // Helper to extract resolution like '360p' from the server name
-      resolution: _extractResolution(json['server'] ?? ''),
+      // API now provides 'stream_url' which is a relative path
+      streamUrl: json['stream_url'] ?? '',
+      quality: json['quality'] ?? 'N/A',
     );
-  }
-
-  static String _extractResolution(String serverName) {
-    final RegExp regExp = RegExp(r'(\d+p)');
-    final match = regExp.firstMatch(serverName);
-    return match?.group(1) ?? 'N/A';
   }
 }
