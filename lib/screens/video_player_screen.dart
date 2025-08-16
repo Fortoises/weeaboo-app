@@ -56,7 +56,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
 
-    final fullUrl = Uri.http(ApiService.baseUrl, stream.streamUrl);
+    // Parse the relative stream URL to separate the path from the query parameters.
+    final streamUri = Uri.parse(stream.streamUrl);
+    final fullUrl = Uri.http(
+      ApiService.baseUrl,
+      streamUri.path,
+      streamUri.queryParameters.isNotEmpty ? streamUri.queryParameters : null,
+    );
 
     _videoPlayerController = VideoPlayerController.networkUrl(
       fullUrl,
