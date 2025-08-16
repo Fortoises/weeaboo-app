@@ -56,13 +56,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
 
-    final fullUrl = Uri.https(ApiService.baseUrl, stream.streamUrl);
+    final fullUrl = Uri.http(ApiService.baseUrl, stream.streamUrl);
 
     _videoPlayerController = VideoPlayerController.networkUrl(
       fullUrl,
-      httpHeaders: const {
-        'Referer': 'https://apimy.ldtp.com/',
-      },
     );
     
     _chewieController = ChewieController(
