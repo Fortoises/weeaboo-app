@@ -139,8 +139,12 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final episode = anime.episodes![index];
-                      return EpisodeListItem(animeSlug: widget.animeSlug, episode: episode);
+                      // Pass the full list and the current index to the item
+                      return EpisodeListItem(
+                        animeSlug: widget.animeSlug,
+                        episodes: anime.episodes!,
+                        currentIndex: index,
+                      );
                     },
                     childCount: anime.episodes?.length ?? 0,
                   ),
@@ -156,11 +160,19 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
 
 class EpisodeListItem extends StatelessWidget {
   final String animeSlug;
-  final Episode episode;
-  const EpisodeListItem({super.key, required this.animeSlug, required this.episode});
+  final List<Episode> episodes;
+  final int currentIndex;
+
+  const EpisodeListItem({
+    super.key,
+    required this.animeSlug,
+    required this.episodes,
+    required this.currentIndex,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final episode = episodes[currentIndex];
     return Container(
       margin: const EdgeInsets.only(bottom: 10.0),
       decoration: BoxDecoration(
@@ -178,8 +190,8 @@ class EpisodeListItem extends StatelessWidget {
               MaterialPageRoute(
                 builder: (context) => VideoPlayerScreen(
                   animeSlug: animeSlug,
-                  episodeSlug: episode.videoID,
-                  episodeTitle: episode.episodeTitle,
+                  episodes: episodes, // Pass the full list
+                  initialEpisodeIndex: currentIndex, // Pass the tapped index
                 ),
               ),
             );
