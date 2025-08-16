@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 class CustomVideoControls extends StatefulWidget {
-  final ChewieController chewieController;
   final String title;
   final VoidCallback onNextEpisode;
   final VoidCallback onPrevEpisode;
@@ -12,7 +11,6 @@ class CustomVideoControls extends StatefulWidget {
 
   const CustomVideoControls({
     super.key,
-    required this.chewieController,
     required this.title,
     required this.onNextEpisode,
     required this.onPrevEpisode,
@@ -25,36 +23,32 @@ class CustomVideoControls extends StatefulWidget {
 }
 
 class _CustomVideoControlsState extends State<CustomVideoControls> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
+  ChewieController? _chewieController;
   bool _isVisible = true;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = widget.chewieController.videoPlayerController;
-    _controller.addListener(_checkVideo);
-  }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final oldController = _chewieController;
+    _chewieController = ChewieController.of(context);
+    _controller = _chewieController!.videoPlayerController;
 
-  @override
-  void didUpdateWidget(covariant CustomVideoControls oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.chewieController.videoPlayerController != _controller) {
-      _controller.removeListener(_checkVideo);
-      _controller = widget.chewieController.videoPlayerController;
-      _controller.addListener(_checkVideo);
+    if (oldController != _chewieController) {
+      _controller!.addListener(_checkVideo);
     }
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_checkVideo);
+    _controller?.removeListener(_checkVideo);
     super.dispose();
   }
 
   void _checkVideo() {
-    if (_controller.value.isPlaying && _isVisible) {
+    if (_controller!.value.isPlaying && _isVisible) {
       Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _controller.value.isPlaying) {
+        if (mounted && _controller!.value.isPlaying) {
           setState(() {
             _isVisible = false;
           });
@@ -141,24 +135,24 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         IconButton(
           icon: const Icon(Icons.replay_10_rounded, color: Colors.white, size: 36),
           onPressed: () {
-            _controller.seekTo(_controller.value.position - const Duration(seconds: 10));
+            _controller!.seekTo(_controller!.value.position - const Duration(seconds: 10));
           },
         ),
         IconButton(
           icon: Icon(
-            _controller.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+            _controller!.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
             color: Colors.white, size: 60,
           ),
           onPressed: () {
             setState(() {
-              _controller.value.isPlaying ? _controller.pause() : _controller.play();
+              _controller!.value.isPlaying ? _controller!.pause() : _controller!.play();
             });
           },
         ),
         IconButton(
           icon: const Icon(Icons.forward_10_rounded, color: Colors.white, size: 36),
           onPressed: () {
-            _controller.seekTo(_controller.value.position + const Duration(seconds: 10));
+            _controller!.seekTo(_controller!.value.position + const Duration(seconds: 10));
           },
         ),
         IconButton(
@@ -177,7 +171,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         mainAxisSize: MainAxisSize.min,
         children: [
           VideoProgressIndicator(
-            _controller,
+            _controller!,
             allowScrubbing: true,
             colors: VideoProgressColors(
               playedColor: const Color(0xFF8A55FE),
@@ -189,7 +183,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           Row(
             children: [
               ValueListenableBuilder(
-                valueListenable: _controller,
+                valueListenable: _controller!,
                 builder: (context, VideoPlayerValue value, child) {
                   return Text(
                     _formatDuration(value.position),
@@ -199,17 +193,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               ),
               const Text(" / ", style: TextStyle(color: Colors.white70)),
               Text(
-                _formatDuration(_controller.value.duration),
+                _formatDuration(_controller!.value.duration),
                 style: const TextStyle(color: Colors.white70),
               ),
               const Spacer(),
               IconButton(
                 icon: Icon(
-                  widget.chewieController.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                  _chewieController!.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
                   color: Colors.white,
                 ),
                 onPressed: () {
-                  widget.chewieController.toggleFullScreen();
+                  _chewieController!.toggleFullScreen();
                 },
               ),
             ],

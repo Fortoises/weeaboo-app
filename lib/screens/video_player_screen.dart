@@ -49,7 +49,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _error = null;
     });
 
-    // Dispose previous controllers if they exist
     await _videoPlayerController?.dispose();
     _chewieController?.dispose();
 
@@ -75,7 +74,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController!,
         customControls: CustomVideoControls(
-          chewieController: _chewieController!,
           title: currentEpisode.episodeTitle,
           onNextEpisode: _goToNextEpisode,
           onPrevEpisode: _goToPrevEpisode,
@@ -106,14 +104,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   void _goToNextEpisode() {
     if (_currentIndex < widget.episodes.length - 1) {
-      _currentIndex++;
+      setState(() {
+        _currentIndex++;
+      });
       _initializePlayerForIndex(_currentIndex);
     }
   }
 
   void _goToPrevEpisode() {
     if (_currentIndex > 0) {
-      _currentIndex--;
+      setState(() {
+        _currentIndex--;
+      });
       _initializePlayerForIndex(_currentIndex);
     }
   }
