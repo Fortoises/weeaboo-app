@@ -4,6 +4,8 @@ import 'package:video_player/video_player.dart';
 
 class CustomVideoControls extends StatefulWidget {
   final String title;
+  final String? prevEpisodeTitle;
+  final String? nextEpisodeTitle;
   final VoidCallback onNextEpisode;
   final VoidCallback onPrevEpisode;
   final bool hasNextEpisode;
@@ -12,6 +14,8 @@ class CustomVideoControls extends StatefulWidget {
   const CustomVideoControls({
     super.key,
     required this.title,
+    this.prevEpisodeTitle,
+    this.nextEpisodeTitle,
     required this.onNextEpisode,
     required this.onPrevEpisode,
     required this.hasNextEpisode,
@@ -23,32 +27,29 @@ class CustomVideoControls extends StatefulWidget {
 }
 
 class _CustomVideoControlsState extends State<CustomVideoControls> {
-  VideoPlayerController? _controller;
-  ChewieController? _chewieController;
+  late VideoPlayerController _controller;
+  late ChewieController _chewieController;
   bool _isVisible = true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final oldController = _chewieController;
     _chewieController = ChewieController.of(context);
-    _controller = _chewieController!.videoPlayerController;
-
-    if (oldController != _chewieController) {
-      _controller!.addListener(_checkVideo);
-    }
+    _controller = _chewieController.videoPlayerController;
+    _controller.addListener(_playListener);
   }
 
   @override
   void dispose() {
-    _controller?.removeListener(_checkVideo);
+    _controller.removeListener(_playListener);
     super.dispose();
   }
 
-  void _checkVideo() {
-    if (_controller!.value.isPlaying && _isVisible) {
+  // Listener to hide controls automatically when playing
+  void _playListener() {
+    if (_controller.value.isPlaying && _isVisible) {
       Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _controller!.value.isPlaying) {
+        if (mounted && _controller.value.isPlaying) {
           setState(() {
             _isVisible = false;
           });
@@ -60,33 +61,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // Allows tapping on transparent areas
       onTap: () {
         setState(() {
           _isVisible = !_isVisible;
         });
       },
-      child: Stack(
-        children: [
-          AnimatedOpacity(
-            opacity: _isVisible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.black87, Colors.transparent, Colors.black87],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.0, 0.5, 1.0],
-                ),
-              ),
-            ),
-          ),
-          AnimatedOpacity(
-            opacity: _isVisible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: _buildControls(context),
-          ),
-        ],
+      child: AnimatedOpacity(
+        opacity: _isVisible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          // This container is the overlay with controls
+          color: Colors.black.withOpacity(0.5),
+          child: _buildControls(context),
+        ),
       ),
     );
   }
@@ -124,91 +112,122 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildMiddleControls() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return AbsorbPointer(
+      absorbing: !_isVisible, // Disable buttons when controls are hidden
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildPrevEpisodeButton(),
+          _buildSkipButton(isForward: false),
+          _buildPlayPauseButton(),
+          _buildSkipButton(isForward: true),
+          _buildNextEpisodeButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrevEpisodeButton() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
           icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 36),
           onPressed: widget.hasPrevEpisode ? widget.onPrevEpisode : null,
           disabledColor: Colors.white30,
         ),
-        IconButton(
-          icon: const Icon(Icons.replay_10_rounded, color: Colors.white, size: 36),
-          onPressed: () {
-            _controller!.seekTo(_controller!.value.position - const Duration(seconds: 10));
-          },
-        ),
-        IconButton(
-          icon: Icon(
-            _controller!.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
-            color: Colors.white, size: 60,
-          ),
-          onPressed: () {
-            setState(() {
-              _controller!.value.isPlaying ? _controller!.pause() : _controller!.play();
-            });
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.forward_10_rounded, color: Colors.white, size: 36),
-          onPressed: () {
-            _controller!.seekTo(_controller!.value.position + const Duration(seconds: 10));
-          },
-        ),
+        if (widget.hasPrevEpisode)
+          Text("Prev: ${widget.prevEpisodeTitle}", style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _buildNextEpisodeButton() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         IconButton(
           icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 36),
           onPressed: widget.hasNextEpisode ? widget.onNextEpisode : null,
           disabledColor: Colors.white30,
         ),
+        if (widget.hasNextEpisode)
+          Text("Next: ${widget.nextEpisodeTitle}", style: const TextStyle(color: Colors.white, fontSize: 12)),
       ],
     );
   }
 
+  Widget _buildSkipButton({required bool isForward}) {
+    return IconButton(
+      icon: Icon(isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: Colors.white, size: 36),
+      onPressed: () {
+        final newPosition = isForward
+            ? _controller.value.position + const Duration(seconds: 10)
+            : _controller.value.position - const Duration(seconds: 10);
+        _controller.seekTo(newPosition);
+      },
+    );
+  }
+
+  Widget _buildPlayPauseButton() {
+    return IconButton(
+      icon: Icon(
+        _controller.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+        color: Colors.white, size: 60,
+      ),
+      onPressed: () {
+        setState(() {
+          _controller.value.isPlaying ? _controller.pause() : _controller.play();
+        });
+      },
+    );
+  }
+
   Widget _buildBottomBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          VideoProgressIndicator(
-            _controller!,
-            allowScrubbing: true,
-            colors: VideoProgressColors(
-              playedColor: const Color(0xFF8A55FE),
-              bufferedColor: Colors.grey[600]!,
-              backgroundColor: Colors.grey[800]!,
+    return AbsorbPointer(
+      absorbing: !_isVisible, // Disable seek bar when controls are hidden
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            VideoProgressIndicator(
+              _controller,
+              allowScrubbing: true,
+              colors: VideoProgressColors(
+                playedColor: const Color(0xFF8A55FE),
+                bufferedColor: Colors.grey[600]!,
+                backgroundColor: Colors.grey[800]!,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              ValueListenableBuilder(
-                valueListenable: _controller!,
-                builder: (context, VideoPlayerValue value, child) {
-                  return Text(
-                    _formatDuration(value.position),
-                    style: const TextStyle(color: Colors.white),
-                  );
-                },
-              ),
-              const Text(" / ", style: TextStyle(color: Colors.white70)),
-              Text(
-                _formatDuration(_controller!.value.duration),
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: Icon(
-                  _chewieController!.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                  color: Colors.white,
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ValueListenableBuilder(
+                  valueListenable: _controller,
+                  builder: (context, VideoPlayerValue value, child) {
+                    return Text(
+                      _formatDuration(value.position),
+                      style: const TextStyle(color: Colors.white),
+                    );
+                  },
                 ),
-                onPressed: () {
-                  _chewieController!.toggleFullScreen();
-                },
-              ),
-            ],
-          ),
-        ],
+                const Text(" / ", style: TextStyle(color: Colors.white70)),
+                Text(
+                  _formatDuration(_controller.value.duration),
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

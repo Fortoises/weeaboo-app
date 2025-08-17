@@ -75,6 +75,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         videoPlayerController: _videoPlayerController!,
         customControls: CustomVideoControls(
           title: currentEpisode.episodeTitle,
+          prevEpisodeTitle: _currentIndex > 0 ? widget.episodes[_currentIndex - 1].episodeTitle : null,
+          nextEpisodeTitle: _currentIndex < widget.episodes.length - 1 ? widget.episodes[_currentIndex + 1].episodeTitle : null,
           onNextEpisode: _goToNextEpisode,
           onPrevEpisode: _goToPrevEpisode,
           hasNextEpisode: _currentIndex < widget.episodes.length - 1,
