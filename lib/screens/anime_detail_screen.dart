@@ -69,6 +69,7 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
           }
 
           final anime = snapshot.data!;
+          final episodes = anime.episodes?.reversed.toList() ?? [];
 
           return CustomScrollView(
             slivers: [
@@ -142,11 +143,11 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
                       // Pass the full list and the current index to the item
                       return EpisodeListItem(
                         animeSlug: widget.animeSlug,
-                        episodes: anime.episodes!,
+                        episodes: episodes,
                         currentIndex: index,
                       );
                     },
-                    childCount: anime.episodes?.length ?? 0,
+                    childCount: episodes.length,
                   ),
                 ),
               ),
