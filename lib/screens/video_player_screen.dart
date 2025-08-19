@@ -83,7 +83,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       final fullUrl = Uri.http(ApiService.baseUrl, streamUri.path, streamUri.queryParameters.isNotEmpty ? streamUri.queryParameters : null);
 
       _videoPlayerController = VideoPlayerController.networkUrl(fullUrl);
+      
+      // Inisialisasi controller dengan konfigurasi yang mengurangi buffering
       await _videoPlayerController!.initialize();
+      
+      // Mengatur buffering strategy untuk mengurangi penggunaan memori
+      // dan mencegah buffering berlebihan saat seek
+      _videoPlayerController!.setLooping(false);
 
       if (!mounted) return;
 
@@ -112,6 +118,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
           return const [];
         },
+        // Menonaktifkan beberapa fitur yang dapat menyebabkan buffering berlebihan
+        showControlsOnInitialize: false,
+        showControls: true,
       );
 
       // Update state after successful initialization

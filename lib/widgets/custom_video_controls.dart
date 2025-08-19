@@ -33,6 +33,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   late ChewieController _chewieController;
   bool _isVisible = true;
   Timer? _hideTimer;
+  bool _isSeeking = false; // Untuk menandai sedang melakukan seek
 
   @override
   void initState() {
@@ -60,7 +61,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   // Listener to hide controls automatically when playing
   void _playListener() {
-    if (_controller.value.isPlaying && _isVisible) {
+    if (_controller.value.isPlaying && _isVisible && !_isSeeking) {
       _hideTimer?.cancel();
       _hideTimer = Timer(const Duration(seconds: 3), () {
         if (mounted) {
@@ -86,7 +87,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       
       // If showing controls and video is playing, start a new timer to hide them
-      if (_isVisible && _controller.value.isPlaying) {
+      if (_isVisible && _controller.value.isPlaying && !_isSeeking) {
         _hideTimer = Timer(const Duration(seconds: 3), () {
           if (mounted) {
             setState(() {
@@ -203,7 +204,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       children: [
         IconButton(
           icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 36),
-          onPressed: widget.hasPrevEpisode ? widget.onNextEpisode : null, // Menukar fungsi
+          onPressed: widget.hasPrevEpisode ? widget.onPrevEpisode : null,
           disabledColor: Colors.white30,
         ),
         if (widget.hasPrevEpisode && episodeLabel.isNotEmpty)
@@ -221,7 +222,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       children: [
         IconButton(
           icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 36),
-          onPressed: widget.hasNextEpisode ? widget.onPrevEpisode : null, // Menukar fungsi
+          onPressed: widget.hasNextEpisode ? widget.onNextEpisode : null,
           disabledColor: Colors.white30,
         ),
         if (widget.hasNextEpisode && episodeLabel.isNotEmpty)
@@ -233,14 +234,26 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Widget _buildSkipButton({required bool isForward}) {
     return IconButton(
       icon: Icon(isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: Colors.white, size: 36),
-      onPressed: () {
+      onPressed: () async {
+        // Tandai bahwa kita sedang melakukan seek
+        setState(() {
+          _isSeeking = true;
+        });
+        
         final currentPosition = _controller.value.position;
         final newPosition = isForward
             ? currentPosition + const Duration(seconds: 10)
             : currentPosition - const Duration(seconds: 10);
         
         // Langsung seek tanpa animasi pause
-        _controller.seekTo(newPosition);
+        await _controller.seekTo(newPosition);
+        
+        // Setelah seek selesai, reset flag seeking
+        if (mounted) {
+          setState(() {
+            _isSeeking = false;
+          });
+        }
         
         // Memastikan sistem UI mode tetap immersive sticky
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -271,11 +284,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           if (_controller.value.isPlaying) {
             _controller.pause();
             _hideTimer?.cancel(); // Cancel hide timer when pausing
+            _isSeeking = false; // Reset seeking flag when pausing
           } else {
             _controller.play();
             // Restart hide timer when playing
             _hideTimer?.cancel();
-            if (_isVisible) {
+            if (_isVisible && !_isSeeking) {
               _hideTimer = Timer(const Duration(seconds: 3), () {
                 if (mounted) {
                   setState(() {
