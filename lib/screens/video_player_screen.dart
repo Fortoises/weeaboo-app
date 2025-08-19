@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
-import '../models/anime_detail.dart'; // Assuming Episode model is here
+import '../models/anime_detail.dart';
+import '../models/episode_stream.dart';
 import '../services/api_service.dart';
 import '../widgets/custom_video_controls.dart';
 
@@ -23,89 +25,110 @@ class VideoPlayerScreen extends StatefulWidget {
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  // Player state
   late int _currentIndex;
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _isLoading = true;
   String? _error;
 
+  // Stream and quality management state
+  List<StreamSource> _allStreams = [];
+  List<String> _availableQualities = [];
+  StreamSource? _currentStream;
+  
+  final List<String> _serverPriority = ['Filedon', 'Pixeldrain', 'Blogger', 'Wibufile'];
+  final List<String> _qualityPriority = ['1080p', '720p', '480p', '360p', 'default'];
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialEpisodeIndex;
-    
-    // Enable fullscreen mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeRight,
-      DeviceOrientation.landscapeLeft,
-    ]);
-
-    // Tambahkan delay kecil untuk memastikan sistem UI mode diterapkan
+    SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeRight, DeviceOrientation.landscapeLeft]);
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _initializeEpisode(_currentIndex);
+    });
+  }
+
+  Future<void> _initializeEpisode(int index) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _currentIndex = index;
+      _allStreams.clear();
+      _availableQualities.clear();
+      _currentStream = null;
     });
 
-    _initializePlayerForIndex(_currentIndex);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Memastikan sistem UI mode tetap immersive sticky saat widget dimuat
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  }
-
-  Future<void> _initializePlayerForIndex(int index) async {
-    // Set loading state immediately
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-    }
-
     await _videoPlayerController?.dispose();
-    _chewieController?.dispose();
-
-    final currentEpisode = widget.episodes[index];
+    _chewieController?.dispose(); // Removed await
 
     try {
-      final data = await ApiService().getEpisodeStream(widget.animeSlug, currentEpisode.videoID);
-      if (!mounted || data.streams.isEmpty) {
-        throw Exception('Tidak ada stream yang tersedia.');
+      final episodeData = await ApiService().getEpisodeStream(widget.animeSlug, widget.episodes[index].videoID);
+      if (!mounted || episodeData.streams.isEmpty) {
+        throw Exception('Tidak ada stream yang tersedia untuk episode ini.');
       }
+      _allStreams = episodeData.streams;
+      _updateAvailableQualities();
 
-      final initialStream = data.streams.firstWhere(
-        (s) => s.quality == '720p', orElse: () => data.streams.first);
+      final initialStream = _findBestInitialStream();
+      if (initialStream == null) {
+        throw Exception('Tidak dapat menemukan stream yang valid sesuai prioritas.');
+      }
+      
+      await _initializePlayer(initialStream);
 
-      final streamUri = Uri.parse(initialStream.streamUrl);
-      final fullUrl = Uri.http(ApiService.baseUrl, streamUri.path, streamUri.queryParameters.isNotEmpty ? streamUri.queryParameters : null);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = "Gagal memuat episode: $e";
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
+  Future<void> _initializePlayer(StreamSource stream, {Duration startAt = Duration.zero}) async {
+    if (!mounted) return;
+    setState(() {
+       _isLoading = true;
+       _currentStream = stream;
+    });
+
+    await _videoPlayerController?.dispose();
+    _chewieController?.dispose(); // Removed await
+
+    try {
+      final fullUrl = Uri.parse(ApiService.baseUrl + stream.streamUrl);
+      
       _videoPlayerController = VideoPlayerController.networkUrl(fullUrl);
-      
-      // Inisialisasi controller dengan konfigurasi yang mengurangi buffering
       await _videoPlayerController!.initialize();
-      
-      // Mengatur buffering strategy untuk mengurangi penggunaan memori
-      // dan mencegah buffering berlebihan saat seek
+      if (startAt > Duration.zero) {
+        await _videoPlayerController!.seekTo(startAt);
+      }
       _videoPlayerController!.setLooping(false);
 
       if (!mounted) return;
 
-      // Memastikan sistem UI mode tetap immersive sticky
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController!,
         customControls: CustomVideoControls(
-          title: currentEpisode.episodeTitle,
-          prevEpisodeTitle: index > 0 ? widget.episodes[index - 1].episodeTitle : null,
-          nextEpisodeTitle: index < widget.episodes.length - 1 ? widget.episodes[index + 1].episodeTitle : null,
+          title: widget.episodes[_currentIndex].episodeTitle,
+          prevEpisodeTitle: _currentIndex > 0 ? widget.episodes[_currentIndex - 1].episodeTitle : null,
+          nextEpisodeTitle: _currentIndex < widget.episodes.length - 1 ? widget.episodes[_currentIndex + 1].episodeTitle : null,
           onNextEpisode: _goToNextEpisode,
           onPrevEpisode: _goToPrevEpisode,
-          hasNextEpisode: index < widget.episodes.length - 1,
-          hasPrevEpisode: index > 0,
+          hasNextEpisode: _currentIndex < widget.episodes.length - 1,
+          hasPrevEpisode: _currentIndex > 0,
+          availableQualities: _availableQualities,
+          currentQuality: _currentStream?.quality ?? 'N/A',
+          onQualitySelected: (newQuality) {
+            _changeStreamQuality(newQuality);
+          },
         ),
         autoPlay: true,
         looping: false,
@@ -113,72 +136,84 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         fullScreenByDefault: true,
         allowedScreenSleep: false,
         placeholder: const Center(child: CircularProgressIndicator()),
-        additionalOptions: (context) {
-          // Memastikan sistem UI mode tetap immersive sticky
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-          return const [];
-        },
-        // Menonaktifkan beberapa fitur yang dapat menyebabkan buffering berlebihan
-        showControlsOnInitialize: false,
-        showControls: true,
       );
 
-      // Update state after successful initialization
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-
+      setState(() => _isLoading = false);
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = "Gagal memuat stream: $e";
+          _error = "Gagal memutar video: $e";
           _isLoading = false;
         });
       }
     }
   }
 
-  void _goToNextEpisode() {
-    print('Next episode button pressed. Current index: $_currentIndex, Episodes length: ${widget.episodes.length}');
-    if (_currentIndex < widget.episodes.length - 1) {
-      setState(() {
-        _currentIndex++;
-        print('Navigating to next episode. New index: $_currentIndex');
-        _isLoading = true; // Set loading state immediately
-        _error = null;
-      });
-      _initializePlayerForIndex(_currentIndex);
+  Future<void> _changeStreamQuality(String newQuality) async {
+    if (_currentStream?.quality == newQuality) return;
+
+    final currentPosition = await _videoPlayerController?.position ?? Duration.zero;
+    final newStream = _findStreamForQuality(newQuality);
+
+    if (newStream != null) {
+      await _initializePlayer(newStream, startAt: currentPosition);
     } else {
-      print('No next episode available');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menemukan stream untuk kualitas $newQuality')),
+      );
+    }
+  }
+
+  StreamSource? _findBestInitialStream() {
+    for (var quality in _qualityPriority) {
+      final stream = _findStreamForQuality(quality);
+      if (stream != null) {
+        return stream;
+      }
+    }
+    return null;
+  }
+
+  StreamSource? _findStreamForQuality(String quality) {
+    for (var serverName in _serverPriority) {
+      try {
+        // Corrected from s.provider to s.server
+        return _allStreams.firstWhere((s) => s.quality == quality && s.server == serverName);
+      } catch (e) {
+        // Not found, continue
+      }
+    }
+    return null;
+  }
+
+  void _updateAvailableQualities() {
+    final qualities = _allStreams.map((s) => s.quality).toSet().toList();
+    qualities.sort((a, b) {
+      if (a == 'default') return 1;
+      if (b == 'default') return -1;
+      final aVal = int.tryParse(a.replaceAll('p', '')) ?? 0;
+      final bVal = int.tryParse(b.replaceAll('p', '')) ?? 0;
+      return bVal.compareTo(aVal);
+    });
+    _availableQualities = qualities;
+  }
+
+  void _goToNextEpisode() {
+    if (_currentIndex < widget.episodes.length - 1) {
+      _initializeEpisode(_currentIndex + 1);
     }
   }
 
   void _goToPrevEpisode() {
-    print('Prev episode button pressed. Current index: $_currentIndex');
     if (_currentIndex > 0) {
-      setState(() {
-        _currentIndex--;
-        print('Navigating to previous episode. New index: $_currentIndex');
-        _isLoading = true; // Set loading state immediately
-        _error = null;
-      });
-      _initializePlayerForIndex(_currentIndex);
-    } else {
-      print('No previous episode available');
+      _initializeEpisode(_currentIndex - 1);
     }
   }
 
   @override
   void dispose() {
-    // Kembali ke mode normal
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
     super.dispose();
@@ -186,22 +221,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Memastikan sistem UI mode tetap immersive sticky
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
         child: _buildPlayer(),
       ),
     );
-  }
-
-  @override
-  void setState(VoidCallback fn) {
-    // Memastikan sistem UI mode tetap immersive sticky saat state berubah
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    super.setState(fn);
   }
 
   Widget _buildPlayer() {
@@ -211,12 +236,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+        child: Text(_error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
       );
     }
     if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
       return Chewie(controller: _chewieController!);
-    } 
-    return const CircularProgressIndicator(color: Colors.white);
+    }
+    return const Center(child: Text('Mempersiapkan player...', style: TextStyle(color: Colors.white)));
   }
 }
