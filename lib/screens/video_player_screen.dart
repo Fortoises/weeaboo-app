@@ -6,18 +6,25 @@ import 'package:video_player/video_player.dart';
 import '../models/anime_detail.dart';
 import '../models/episode_stream.dart';
 import '../services/api_service.dart';
+import '../services/history_service.dart';
 import '../widgets/custom_video_controls.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final String animeSlug;
+  final String animeTitle;
+  final String coverUrl;
   final List<Episode> episodes;
   final int initialEpisodeIndex;
+  final Duration? startAtPosition; // Add optional startAtPosition
 
   const VideoPlayerScreen({
     super.key,
     required this.animeSlug,
+    required this.animeTitle,
+    required this.coverUrl,
     required this.episodes,
     required this.initialEpisodeIndex,
+    this.startAtPosition, // Add to constructor
   });
 
   @override
@@ -37,6 +44,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   List<String> _availableQualities = [];
   StreamSource? _currentStream;
   
+  final HistoryService _historyService = HistoryService();
   final List<String> _serverPriority = ['Filedon', 'Pixeldrain', 'Blogger', 'Wibufile'];
   final List<String> _qualityPriority = ['1080p', '720p', '480p', '360p', 'default'];
 
@@ -49,11 +57,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      _initializeEpisode(_currentIndex);
+      // Pass the startAtPosition to the initial episode load
+      _initializeEpisode(_currentIndex, startAt: widget.startAtPosition ?? Duration.zero);
     });
   }
 
-  Future<void> _initializeEpisode(int index) async {
+  Future<void> _saveHistory() async {
+    if (_videoPlayerController == null || _currentStream == null) return;
+
+    final position = await _videoPlayerController!.position;
+    final duration = _videoPlayerController!.value.duration;
+
+    if (position != null && position > const Duration(seconds: 5) && position.inSeconds < duration.inSeconds - 5) {
+      final entry = HistoryEntry(
+        animeSlug: widget.animeSlug,
+        episodeId: widget.episodes[_currentIndex].videoID,
+        episodeTitle: widget.episodes[_currentIndex].episodeTitle,
+        animeTitle: widget.animeTitle,
+        coverUrl: widget.coverUrl,
+        lastPosition: position,
+        totalDuration: duration,
+        watchedAt: DateTime.now(),
+      );
+      await _historyService.addOrUpdateHistory(entry);
+      print("History saved for ${widget.animeTitle} at ${position.inMinutes} minutes.");
+    }
+  }
+
+  Future<void> _initializeEpisode(int index, {Duration startAt = Duration.zero}) async {
+    await _saveHistory();
     if (!mounted) return;
     setState(() {
       _isLoading = true;
@@ -73,8 +105,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         throw Exception('Tidak ada stream yang tersedia untuk episode ini.');
       }
       _allStreams = episodeData.streams;
-      // Log for debugging stream issues
-      print("Available streams: ${_allStreams.map((s) => '${s.quality} on ${s.server}').toList()}");
+      print("Available streams: ${_allStreams.map((s) => '${s.quality} on ${s.provider}').toList()}");
       _updateAvailableQualities();
 
       final initialStream = _findBestInitialStream();
@@ -82,7 +113,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         throw Exception('Tidak dapat menemukan stream yang valid sesuai prioritas.');
       }
       
-      await _initializePlayer(initialStream);
+      await _initializePlayer(initialStream, startAt: startAt);
 
     } catch (e) {
       if (mounted) {
@@ -105,9 +136,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _chewieController?.dispose();
 
     try {
-      // Construct the full URL with the correct scheme
       final fullUrl = Uri.parse("http://${ApiService.baseUrl}${stream.streamUrl}");
-      print("Attempting to play URL: $fullUrl"); // Debugging line
+      print("Attempting to play URL: $fullUrl");
       
       _videoPlayerController = VideoPlayerController.networkUrl(fullUrl);
       await _videoPlayerController!.initialize();
@@ -157,6 +187,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (_currentStream?.quality == newQuality) return;
 
     final currentPosition = await _videoPlayerController?.position ?? Duration.zero;
+    await _saveHistory();
     final newStream = _findStreamForQuality(newQuality);
 
     if (newStream != null) {
@@ -181,7 +212,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   StreamSource? _findStreamForQuality(String quality) {
     for (var serverName in _serverPriority) {
       try {
-        // Corrected to use s.provider for matching
         return _allStreams.firstWhere((s) => s.quality == quality && s.provider.toLowerCase() == serverName.toLowerCase());
       } catch (e) {
         // Not found, continue
@@ -216,6 +246,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
+    _saveHistory();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
     _videoPlayerController?.dispose();

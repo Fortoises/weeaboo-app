@@ -154,6 +154,8 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
                             MaterialPageRoute(
                               builder: (context) => VideoPlayerScreen(
                                 animeSlug: widget.animeSlug,
+                                animeTitle: anime.title, // Pass anime title
+                                coverUrl: anime.cover ?? '', // Pass cover url
                                 episodes: chronologicalEpisodes,
                                 initialEpisodeIndex: chronologicalIndex,
                               ),

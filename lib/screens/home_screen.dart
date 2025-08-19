@@ -1,12 +1,14 @@
-
 import 'dart:async';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:shimmer/shimmer.dart';
+import '../models/anime_detail.dart';
 import '../services/api_service.dart';
 import '../models/anime.dart';
+import '../services/history_service.dart';
 import 'anime_detail_screen.dart';
+import 'video_player_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -59,14 +61,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: ListView(
-        children: [
-          const SearchBarWidget(),
-          Top10AnimeSection(top10AnimeFuture: _top10AnimeFuture, onRetry: _retryFetch),
-          const ContinueWatchingSection(),
-          const SectionTitle(title: 'New Update Anime'),
-          LatestAnimeGrid(latestAnimeFuture: _latestAnimeFuture, onRetry: _retryFetch),
-        ],
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _retryFetch();
+        },
+        child: ListView(
+          children: [
+            const SearchBarWidget(),
+            Top10AnimeSection(top10AnimeFuture: _top10AnimeFuture, onRetry: _retryFetch),
+            ContinueWatchingSection(key: UniqueKey()), // Use UniqueKey to force rebuild on refresh
+            const SectionTitle(title: 'New Update Anime'),
+            LatestAnimeGrid(latestAnimeFuture: _latestAnimeFuture, onRetry: _retryFetch),
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
@@ -83,6 +90,170 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: const Color(0xFF8A55FE),
         unselectedItemColor: Colors.white54,
         showUnselectedLabels: true,
+      ),
+    );
+  }
+}
+
+class ContinueWatchingSection extends StatefulWidget {
+  const ContinueWatchingSection({super.key});
+
+  @override
+  State<ContinueWatchingSection> createState() => _ContinueWatchingSectionState();
+}
+
+class _ContinueWatchingSectionState extends State<ContinueWatchingSection> {
+  late Future<HistoryEntry?> _historyFuture;
+  final ApiService _apiService = ApiService();
+
+  @override
+  void initState() {
+    super.initState();
+    _historyFuture = HistoryService().getLatestWatchHistory();
+  }
+
+  void _resumeWatching(BuildContext context, HistoryEntry entry) async {
+    try {
+      // We need to fetch the full episode list to pass to the player
+      final animeDetail = await _apiService.getAnimeDetail(entry.animeSlug);
+      final episodes = animeDetail.episodes?.reversed.toList() ?? [];
+      final episodeIndex = episodes.indexWhere((ep) => ep.videoID == entry.episodeId);
+
+      if (episodeIndex == -1) {
+        throw Exception('Episode not found in the list.');
+      }
+
+      if (!context.mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerScreen(
+            animeSlug: entry.animeSlug,
+            animeTitle: entry.animeTitle,
+            coverUrl: entry.coverUrl,
+            episodes: episodes,
+            initialEpisodeIndex: episodeIndex,
+            // Pass the resume position
+            startAtPosition: entry.lastPosition,
+          ),
+        ),
+      ).then((_) {
+        // Refresh history when returning from player
+        setState(() {
+          _historyFuture = HistoryService().getLatestWatchHistory();
+        });
+      });
+
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal melanjutkan tontonan: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<HistoryEntry?>(
+      future: _historyFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _ShimmerLoadingCard();
+        }
+
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
+          // Show nothing if there is an error or no history
+          return const SizedBox.shrink();
+        }
+
+        final entry = snapshot.data!;
+        final progress = entry.totalDuration.inSeconds > 0
+            ? entry.lastPosition.inSeconds / entry.totalDuration.inSeconds
+            : 0.0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionTitle(title: 'Terakhir Ditonton'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: GestureDetector(
+                onTap: () => _resumeWatching(context, entry),
+                child: Container(
+                  padding: const EdgeInsets.all(12.0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2C2C3A),
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8.0),
+                            child: Image.network(
+                              entry.coverUrl,
+                              width: 100,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(width: 100, height: 60, color: Colors.grey[800]),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.animeTitle,
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(entry.episodeTitle, style: const TextStyle(color: Colors.white70)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.play_circle_fill, color: Color(0xFF8A55FE), size: 40),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey[700],
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF8A55FE)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ShimmerLoadingCard extends StatelessWidget {
+  const _ShimmerLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[850]!,
+        highlightColor: Colors.grey[800]!,
+        child: Container(
+          height: 100,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(12.0),
+          ),
+        ),
       ),
     );
   }
@@ -291,62 +462,6 @@ class TopAnimeCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class ContinueWatchingSection extends StatelessWidget {
-  const ContinueWatchingSection({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionTitle(title: 'Terakhir Ditonton'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Container(
-            padding: const EdgeInsets.all(12.0),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2C2C3A),
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: Image.network(
-                    'https://placehold.co/80x60/2C2C3A/FFFFFF?text=Anime', // Reliable placeholder image
-                    width: 80,
-                    height: 60,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sakamoto Days Part 2',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text('Eps 6', style: TextStyle(color: Colors.white70)),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.play_circle_fill, color: Color(0xFF8A55FE), size: 40),
-                  onPressed: () {},
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
