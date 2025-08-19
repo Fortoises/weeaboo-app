@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../models/anime_detail.dart'; // Assuming Episode model is here
-import '../models/episode_stream.dart';
 import '../services/api_service.dart';
 import '../widgets/custom_video_controls.dart';
 
@@ -58,10 +57,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _initializePlayerForIndex(int index) async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    // Set loading state immediately
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     await _videoPlayerController?.dispose();
     _chewieController?.dispose();
@@ -92,12 +94,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         videoPlayerController: _videoPlayerController!,
         customControls: CustomVideoControls(
           title: currentEpisode.episodeTitle,
-          prevEpisodeTitle: _currentIndex > 0 ? widget.episodes[_currentIndex - 1].episodeTitle : null,
-          nextEpisodeTitle: _currentIndex < widget.episodes.length - 1 ? widget.episodes[_currentIndex + 1].episodeTitle : null,
+          prevEpisodeTitle: index > 0 ? widget.episodes[index - 1].episodeTitle : null,
+          nextEpisodeTitle: index < widget.episodes.length - 1 ? widget.episodes[index + 1].episodeTitle : null,
           onNextEpisode: _goToNextEpisode,
           onPrevEpisode: _goToPrevEpisode,
-          hasNextEpisode: _currentIndex < widget.episodes.length - 1,
-          hasPrevEpisode: _currentIndex > 0,
+          hasNextEpisode: index < widget.episodes.length - 1,
+          hasPrevEpisode: index > 0,
         ),
         autoPlay: true,
         looping: false,
@@ -112,9 +114,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         },
       );
 
-      setState(() {
-        _isLoading = false;
-      });
+      // Update state after successful initialization
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
 
     } catch (e) {
       if (mounted) {
@@ -132,6 +137,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       setState(() {
         _currentIndex++;
         print('Navigating to next episode. New index: $_currentIndex');
+        _isLoading = true; // Set loading state immediately
+        _error = null;
       });
       _initializePlayerForIndex(_currentIndex);
     } else {
@@ -145,6 +152,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       setState(() {
         _currentIndex--;
         print('Navigating to previous episode. New index: $_currentIndex');
+        _isLoading = true; // Set loading state immediately
+        _error = null;
       });
       _initializePlayerForIndex(_currentIndex);
     } else {

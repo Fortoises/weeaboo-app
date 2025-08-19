@@ -71,6 +71,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       });
     }
     
+    // Update UI when play/pause state changes
+    if (mounted) {
+      setState(() {
+        // Just trigger a rebuild to update the play/pause button
+      });
+    }
+    
     // Memastikan sistem UI mode tetap immersive sticky
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
@@ -158,7 +165,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        // Tukar posisi next dan prev untuk memperbaiki arah
         _buildPrevEpisodeButton(), // Prev episode di kiri
         _buildSkipButton(isForward: false),
         _buildPlayPauseButton(),
@@ -235,9 +241,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return IconButton(
       icon: Icon(isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: Colors.white, size: 36),
       onPressed: () async {
+        final currentPosition = _controller.value.position;
         final newPosition = isForward
-            ? _controller.value.position + const Duration(seconds: 10)
-            : _controller.value.position - const Duration(seconds: 10);
+            ? currentPosition + const Duration(seconds: 10)
+            : currentPosition - const Duration(seconds: 10);
             
         // Tampilkan indikator buffering saat seek
         setState(() {
@@ -259,6 +266,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               });
             }
           });
+        }
+        
+        // Force UI update after seek with a small delay
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (mounted) {
+            setState(() {});
+          }
         }
       },
     );
