@@ -15,7 +15,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final String coverUrl;
   final List<Episode> episodes;
   final int initialEpisodeIndex;
-  final Duration? startAtPosition; // Add optional startAtPosition
+  final Duration? startAtPosition;
 
   const VideoPlayerScreen({
     super.key,
@@ -24,7 +24,7 @@ class VideoPlayerScreen extends StatefulWidget {
     required this.coverUrl,
     required this.episodes,
     required this.initialEpisodeIndex,
-    this.startAtPosition, // Add to constructor
+    this.startAtPosition,
   });
 
   @override
@@ -32,21 +32,22 @@ class VideoPlayerScreen extends StatefulWidget {
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  // Player state
   late int _currentIndex;
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _isLoading = true;
   String? _error;
 
-  // Stream and quality management state
   List<StreamSource> _allStreams = [];
   List<String> _availableQualities = [];
   StreamSource? _currentStream;
+  String _debugInfo = ''; // State variable for on-screen debug info
   
   final HistoryService _historyService = HistoryService();
   final List<String> _serverPriority = ['Filedon', 'Pixeldrain', 'Blogger', 'Wibufile'];
   final List<String> _qualityPriority = ['1080p', '720p', '480p', '360p', 'default'];
+
+  late final AppLifecycleListener _listener;
 
   @override
   void initState() {
@@ -55,19 +56,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeRight, DeviceOrientation.landscapeLeft]);
     
+    _listener = AppLifecycleListener(
+      onStateChange: _onLifecycleStateChange,
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      // Pass the startAtPosition to the initial episode load
       _initializeEpisode(_currentIndex, startAt: widget.startAtPosition ?? Duration.zero);
     });
   }
 
+  void _onLifecycleStateChange(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _saveHistory();
+    }
+  }
+
   Future<void> _saveHistory() async {
     if (_videoPlayerController == null || _currentStream == null) return;
-
     final position = await _videoPlayerController!.position;
     final duration = _videoPlayerController!.value.duration;
-
     if (position != null && position > const Duration(seconds: 5) && position.inSeconds < duration.inSeconds - 5) {
       final entry = HistoryEntry(
         animeSlug: widget.animeSlug,
@@ -80,7 +88,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         watchedAt: DateTime.now(),
       );
       await _historyService.addOrUpdateHistory(entry);
-      print("History saved for ${widget.animeTitle} at ${position.inMinutes} minutes.");
     }
   }
 
@@ -94,6 +101,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _allStreams.clear();
       _availableQualities.clear();
       _currentStream = null;
+      _debugInfo = 'Fetching streams...';
     });
 
     _videoPlayerController?.dispose();
@@ -105,9 +113,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         throw Exception('Tidak ada stream yang tersedia untuk episode ini.');
       }
       _allStreams = episodeData.streams;
-      print("Available streams: ${_allStreams.map((s) => '${s.quality} on ${s.provider}').toList()}");
-      _updateAvailableQualities();
+      
+      setState(() {
+        final streamListForDebug = _allStreams.map((s) => '${s.quality} on ${s.provider} (${s.server})').toList();
+        _debugInfo = 'Available streams:\n${streamListForDebug.join('\n')}';
+      });
 
+      _updateAvailableQualities();
       final initialStream = _findBestInitialStream();
       if (initialStream == null) {
         throw Exception('Tidak dapat menemukan stream yang valid sesuai prioritas.');
@@ -119,6 +131,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (mounted) {
         setState(() {
           _error = "Gagal memuat episode: $e";
+          _debugInfo += '\n\nError: $e';
           _isLoading = false;
         });
       }
@@ -137,7 +150,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     try {
       final fullUrl = Uri.parse("http://${ApiService.baseUrl}${stream.streamUrl}");
-      print("Attempting to play URL: $fullUrl");
+      
+      setState(() {
+        _debugInfo += '\n\nAttempting to play:\n${stream.quality} on ${stream.provider}\nURL: $fullUrl';
+      });
       
       _videoPlayerController = VideoPlayerController.networkUrl(fullUrl);
       await _videoPlayerController!.initialize();
@@ -177,6 +193,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (mounted) {
         setState(() {
           _error = "Gagal memutar video: $e";
+          _debugInfo += '\n\nError while playing: $e';
           _isLoading = false;
         });
       }
@@ -185,11 +202,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Future<void> _changeStreamQuality(String newQuality) async {
     if (_currentStream?.quality == newQuality) return;
-
     final currentPosition = await _videoPlayerController?.position ?? Duration.zero;
     await _saveHistory();
     final newStream = _findStreamForQuality(newQuality);
-
     if (newStream != null) {
       await _initializePlayer(newStream, startAt: currentPosition);
     } else {
@@ -202,9 +217,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   StreamSource? _findBestInitialStream() {
     for (var quality in _qualityPriority) {
       final stream = _findStreamForQuality(quality);
-      if (stream != null) {
-        return stream;
-      }
+      if (stream != null) return stream;
     }
     return null;
   }
@@ -214,7 +227,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       try {
         return _allStreams.firstWhere((s) => s.quality == quality && s.provider.toLowerCase() == serverName.toLowerCase());
       } catch (e) {
-        // Not found, continue
+        // Not found
       }
     }
     return null;
@@ -246,6 +259,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
+    _listener.dispose();
     _saveHistory();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
@@ -265,18 +279,39 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Widget _buildPlayer() {
+    Widget player;
     if (_isLoading) {
-      return const CircularProgressIndicator(color: Colors.white);
-    }
-    if (_error != null) {
-      return Padding(
+      player = const CircularProgressIndicator(color: Colors.white);
+    } else if (_error != null) {
+      player = Padding(
         padding: const EdgeInsets.all(16.0),
         child: Text(_error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
       );
+    } else if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
+      player = Chewie(controller: _chewieController!);
+    } else {
+      player = const Center(child: Text('Mempersiapkan player...', style: TextStyle(color: Colors.white)));
     }
-    if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
-      return Chewie(controller: _chewieController!);
-    }
-    return const Center(child: Text('Mempersiapkan player...', style: TextStyle(color: Colors.white)));
+
+    return Stack(
+      children: [
+        Center(child: player),
+        // On-screen debug overlay
+        Positioned(
+          left: 8,
+          top: 8,
+          child: SafeArea(
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              color: Colors.black.withOpacity(0.6),
+              child: Text(
+                _debugInfo,
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

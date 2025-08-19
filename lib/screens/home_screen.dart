@@ -22,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Anime>> _top10AnimeFuture;
   final ApiService _apiService = ApiService();
   int _selectedIndex = 0;
+  final GlobalKey<_ContinueWatchingSectionState> _continueWatchingKey = GlobalKey();
 
   @override
   void initState() {
@@ -34,9 +35,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _top10AnimeFuture = _apiService.getTop10Anime();
   }
 
-  void _retryFetch() {
+  Future<void> _refreshData() async {
     setState(() {
       _fetchData();
+      // Also refresh the continue watching section
+      _continueWatchingKey.currentState?.refreshHistory();
     });
   }
 
@@ -62,16 +65,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          _retryFetch();
-        },
+        onRefresh: _refreshData,
         child: ListView(
           children: [
             const SearchBarWidget(),
-            Top10AnimeSection(top10AnimeFuture: _top10AnimeFuture, onRetry: _retryFetch),
-            ContinueWatchingSection(key: UniqueKey()), // Use UniqueKey to force rebuild on refresh
+            Top10AnimeSection(top10AnimeFuture: _top10AnimeFuture, onRetry: _refreshData),
+            ContinueWatchingSection(key: _continueWatchingKey),
             const SectionTitle(title: 'New Update Anime'),
-            LatestAnimeGrid(latestAnimeFuture: _latestAnimeFuture, onRetry: _retryFetch),
+            LatestAnimeGrid(latestAnimeFuture: _latestAnimeFuture, onRetry: _refreshData),
           ],
         ),
       ),
@@ -105,16 +106,33 @@ class ContinueWatchingSection extends StatefulWidget {
 class _ContinueWatchingSectionState extends State<ContinueWatchingSection> {
   late Future<HistoryEntry?> _historyFuture;
   final ApiService _apiService = ApiService();
+  late final AppLifecycleListener _listener;
 
   @override
   void initState() {
     super.initState();
-    _historyFuture = HistoryService().getLatestWatchHistory();
+    refreshHistory();
+    _listener = AppLifecycleListener(
+      onResume: () => refreshHistory(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _listener.dispose();
+    super.dispose();
+  }
+
+  void refreshHistory() {
+    if (mounted) {
+      setState(() {
+        _historyFuture = HistoryService().getLatestWatchHistory();
+      });
+    }
   }
 
   void _resumeWatching(BuildContext context, HistoryEntry entry) async {
     try {
-      // We need to fetch the full episode list to pass to the player
       final animeDetail = await _apiService.getAnimeDetail(entry.animeSlug);
       final episodes = animeDetail.episodes?.reversed.toList() ?? [];
       final episodeIndex = episodes.indexWhere((ep) => ep.videoID == entry.episodeId);
@@ -125,6 +143,7 @@ class _ContinueWatchingSectionState extends State<ContinueWatchingSection> {
 
       if (!context.mounted) return;
 
+      // No need for .then() here anymore, AppLifecycleListener handles it
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -134,16 +153,10 @@ class _ContinueWatchingSectionState extends State<ContinueWatchingSection> {
             coverUrl: entry.coverUrl,
             episodes: episodes,
             initialEpisodeIndex: episodeIndex,
-            // Pass the resume position
             startAtPosition: entry.lastPosition,
           ),
         ),
-      ).then((_) {
-        // Refresh history when returning from player
-        setState(() {
-          _historyFuture = HistoryService().getLatestWatchHistory();
-        });
-      });
+      );
 
     } catch (e) {
       if (context.mounted) {
@@ -164,7 +177,6 @@ class _ContinueWatchingSectionState extends State<ContinueWatchingSection> {
         }
 
         if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-          // Show nothing if there is an error or no history
           return const SizedBox.shrink();
         }
 
