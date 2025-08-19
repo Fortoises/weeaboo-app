@@ -324,14 +324,20 @@ class ContinueWatchingSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Sakamoto Days Part 2', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('Eps 6', style: TextStyle(color: Colors.white70)),
-                  ],
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sakamoto Days Part 2',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text('Eps 6', style: TextStyle(color: Colors.white70)),
+                    ],
+                  ),
                 ),
-                const Spacer(), // Use Spacer to push the button to the end
                 IconButton(
                   icon: const Icon(Icons.play_circle_fill, color: Color(0xFF8A55FE), size: 40),
                   onPressed: () {},

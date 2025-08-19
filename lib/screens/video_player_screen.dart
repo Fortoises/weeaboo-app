@@ -64,8 +64,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _currentStream = null;
     });
 
-    await _videoPlayerController?.dispose();
-    _chewieController?.dispose(); // Removed await
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
 
     try {
       final episodeData = await ApiService().getEpisodeStream(widget.animeSlug, widget.episodes[index].videoID);
@@ -73,6 +73,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         throw Exception('Tidak ada stream yang tersedia untuk episode ini.');
       }
       _allStreams = episodeData.streams;
+      // Log for debugging stream issues
+      print("Available streams: ${_allStreams.map((s) => '${s.quality} on ${s.server}').toList()}");
       _updateAvailableQualities();
 
       final initialStream = _findBestInitialStream();
@@ -99,8 +101,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
        _currentStream = stream;
     });
 
-    await _videoPlayerController?.dispose();
-    _chewieController?.dispose(); // Removed await
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
 
     try {
       final fullUrl = Uri.parse(ApiService.baseUrl + stream.streamUrl);
@@ -177,8 +179,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   StreamSource? _findStreamForQuality(String quality) {
     for (var serverName in _serverPriority) {
       try {
-        // Corrected from s.provider to s.server
-        return _allStreams.firstWhere((s) => s.quality == quality && s.server == serverName);
+        // Make comparison case-insensitive to avoid mismatches like 'Blogger' vs 'blogger'
+        return _allStreams.firstWhere((s) => s.quality == quality && s.server.toLowerCase() == serverName.toLowerCase());
       } catch (e) {
         // Not found, continue
       }
