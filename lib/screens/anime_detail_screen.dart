@@ -69,7 +69,10 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
           }
 
           final anime = snapshot.data!;
-          final episodes = anime.episodes?.reversed.toList() ?? [];
+          // List for display (newest to oldest, as from API)
+          final displayEpisodes = anime.episodes ?? [];
+          // List for player logic (oldest to newest)
+          final chronologicalEpisodes = displayEpisodes.reversed.toList();
 
           return CustomScrollView(
             slivers: [
@@ -140,14 +143,26 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      // Pass the full list and the current index to the item
+                      final tappedEpisode = displayEpisodes[index];
+                      final chronologicalIndex = chronologicalEpisodes.indexWhere((ep) => ep.videoID == tappedEpisode.videoID);
+
                       return EpisodeListItem(
-                        animeSlug: widget.animeSlug,
-                        episodes: episodes,
-                        currentIndex: index,
+                        episode: tappedEpisode,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => VideoPlayerScreen(
+                                animeSlug: widget.animeSlug,
+                                episodes: chronologicalEpisodes,
+                                initialEpisodeIndex: chronologicalIndex,
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
-                    childCount: episodes.length,
+                    childCount: displayEpisodes.length,
                   ),
                 ),
               ),
@@ -160,20 +175,17 @@ class _AnimeDetailScreenState extends State<AnimeDetailScreen> {
 }
 
 class EpisodeListItem extends StatelessWidget {
-  final String animeSlug;
-  final List<Episode> episodes;
-  final int currentIndex;
+  final Episode episode;
+  final VoidCallback onTap;
 
   const EpisodeListItem({
     super.key,
-    required this.animeSlug,
-    required this.episodes,
-    required this.currentIndex,
+    required this.episode,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final episode = episodes[currentIndex];
     return Container(
       margin: const EdgeInsets.only(bottom: 10.0),
       decoration: BoxDecoration(
@@ -185,18 +197,7 @@ class EpisodeListItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12.0),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => VideoPlayerScreen(
-                  animeSlug: animeSlug,
-                  episodes: episodes, // Pass the full list
-                  initialEpisodeIndex: currentIndex, // Pass the tapped index
-                ),
-              ),
-            );
-          },
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
             child: Row(
