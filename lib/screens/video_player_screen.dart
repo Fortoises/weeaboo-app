@@ -77,10 +77,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           title: currentEpisode.episodeTitle,
           prevEpisodeTitle: _currentIndex > 0 ? widget.episodes[_currentIndex - 1].episodeTitle : null,
           nextEpisodeTitle: _currentIndex < widget.episodes.length - 1 ? widget.episodes[_currentIndex + 1].episodeTitle : null,
-          onNextEpisode: _goToNextEpisode,
-          onPrevEpisode: _goToPrevEpisode,
-          hasNextEpisode: _currentIndex < widget.episodes.length - 1,
-          hasPrevEpisode: _currentIndex > 0,
+          onNextEpisode: _goToPrevEpisode, // Tukar fungsi
+          onPrevEpisode: _goToNextEpisode, // Tukar fungsi
+          hasNextEpisode: _currentIndex > 0, // Sesuaikan dengan tukar fungsi
+          hasPrevEpisode: _currentIndex < widget.episodes.length - 1, // Sesuaikan dengan tukar fungsi
         ),
         autoPlay: true,
         looping: false,
@@ -105,18 +105,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _goToNextEpisode() {
-    if (_currentIndex < widget.episodes.length - 1) {
+    if (_currentIndex > 0) { // Perbaiki logika
       setState(() {
-        _currentIndex++;
+        _currentIndex--;
       });
       _initializePlayerForIndex(_currentIndex);
     }
   }
 
   void _goToPrevEpisode() {
-    if (_currentIndex > 0) {
+    if (_currentIndex < widget.episodes.length - 1) { // Perbaiki logika
       setState(() {
-        _currentIndex--;
+        _currentIndex++;
       });
       _initializePlayerForIndex(_currentIndex);
     }

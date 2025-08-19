@@ -1,6 +1,7 @@
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'dart:async';
 
 class CustomVideoControls extends StatefulWidget {
   final String title;
@@ -30,6 +31,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   late VideoPlayerController _controller;
   late ChewieController _chewieController;
   bool _isVisible = true;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void didChangeDependencies() {
@@ -41,6 +48,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   @override
   void dispose() {
+    _hideTimer?.cancel();
     _controller.removeListener(_playListener);
     super.dispose();
   }
@@ -48,8 +56,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   // Listener to hide controls automatically when playing
   void _playListener() {
     if (_controller.value.isPlaying && _isVisible) {
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _controller.value.isPlaying) {
+      _hideTimer?.cancel();
+      _hideTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) {
           setState(() {
             _isVisible = false;
           });
@@ -58,21 +67,38 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     }
   }
 
+  void _toggleControls() {
+    setState(() {
+      _isVisible = !_isVisible;
+      
+      // Cancel any pending hide timer when manually toggling
+      _hideTimer?.cancel();
+      
+      // If showing controls and video is playing, start a new timer to hide them
+      if (_isVisible && _controller.value.isPlaying) {
+        _hideTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _isVisible = false;
+            });
+          }
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque, // Allows tapping on transparent areas
-      onTap: () {
-        setState(() {
-          _isVisible = !_isVisible;
-        });
-      },
+      onTap: _toggleControls,
       child: AnimatedOpacity(
         opacity: _isVisible ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 200), // Faster animation
         child: Container(
           // This container is the overlay with controls
-          color: Colors.black.withOpacity(0.5),
+          // Mengurangi opacity untuk membuat tampilan lebih bersih
+          color: Colors.black.withOpacity(0.3),
           child: _buildControls(context),
         ),
       ),
@@ -92,6 +118,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Widget _buildTopBar(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      // Menghapus latar belakang hitam yang tidak perlu
       child: Row(
         children: [
           IconButton(
@@ -112,22 +139,49 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildMiddleControls() {
-    return AbsorbPointer(
-      absorbing: !_isVisible, // Disable buttons when controls are hidden
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildPrevEpisodeButton(),
-          _buildSkipButton(isForward: false),
-          _buildPlayPauseButton(),
-          _buildSkipButton(isForward: true),
-          _buildNextEpisodeButton(),
-        ],
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        // Tukar posisi next dan prev untuk memperbaiki arah
+        _buildPrevEpisodeButton(), // Prev episode di kiri
+        _buildSkipButton(isForward: false),
+        _buildPlayPauseButton(),
+        _buildSkipButton(isForward: true),
+        _buildNextEpisodeButton(), // Next episode di kanan
+      ],
     );
   }
 
+  // Extract episode number from title
+  String _extractEpisodeNumber(String? title) {
+    if (title == null) return '';
+    
+    // Cari pola seperti "Eps 1", "Episode 1", "Eps. 1", dll.
+    final RegExp regExp = RegExp(r'(?:Eps|Episode|Eps\.)\s*(\d+)', caseSensitive: false);
+    final Match? match = regExp.firstMatch(title);
+    
+    if (match != null) {
+      return 'Episode ${match.group(1)}';
+    }
+    
+    // Jika tidak ditemukan pola, kembalikan bagian setelah karakter terakhir ": " atau " - "
+    final List<String> separators = [': ', ' - '];
+    for (final separator in separators) {
+      if (title.contains(separator)) {
+        final parts = title.split(separator);
+        if (parts.length > 1) {
+          return parts.last.trim();
+        }
+      }
+    }
+    
+    // Jika masih tidak ditemukan, kembalikan title asli
+    return title;
+  }
+
   Widget _buildPrevEpisodeButton() {
+    final String episodeLabel = _extractEpisodeNumber(widget.prevEpisodeTitle);
+    
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -136,13 +190,15 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           onPressed: widget.hasPrevEpisode ? widget.onPrevEpisode : null,
           disabledColor: Colors.white30,
         ),
-        if (widget.hasPrevEpisode)
-          Text("Prev: ${widget.prevEpisodeTitle}", style: const TextStyle(color: Colors.white, fontSize: 12)),
+        if (widget.hasPrevEpisode && episodeLabel.isNotEmpty)
+          Text(episodeLabel, style: const TextStyle(color: Colors.white, fontSize: 12)),
       ],
     );
   }
 
   Widget _buildNextEpisodeButton() {
+    final String episodeLabel = _extractEpisodeNumber(widget.nextEpisodeTitle);
+    
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -151,8 +207,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           onPressed: widget.hasNextEpisode ? widget.onNextEpisode : null,
           disabledColor: Colors.white30,
         ),
-        if (widget.hasNextEpisode)
-          Text("Next: ${widget.nextEpisodeTitle}", style: const TextStyle(color: Colors.white, fontSize: 12)),
+        if (widget.hasNextEpisode && episodeLabel.isNotEmpty)
+          Text(episodeLabel, style: const TextStyle(color: Colors.white, fontSize: 12)),
       ],
     );
   }
@@ -160,11 +216,29 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Widget _buildSkipButton({required bool isForward}) {
     return IconButton(
       icon: Icon(isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: Colors.white, size: 36),
-      onPressed: () {
+      onPressed: () async {
         final newPosition = isForward
             ? _controller.value.position + const Duration(seconds: 10)
             : _controller.value.position - const Duration(seconds: 10);
-        _controller.seekTo(newPosition);
+            
+        // Tampilkan indikator buffering saat seek
+        setState(() {
+          _isVisible = true;
+        });
+        
+        await _controller.seekTo(newPosition);
+        
+        // Reset timer when skipping
+        _hideTimer?.cancel();
+        if (_isVisible && _controller.value.isPlaying) {
+          _hideTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted) {
+              setState(() {
+                _isVisible = false;
+              });
+            }
+          });
+        }
       },
     );
   }
@@ -177,57 +251,70 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       ),
       onPressed: () {
         setState(() {
-          _controller.value.isPlaying ? _controller.pause() : _controller.play();
+          if (_controller.value.isPlaying) {
+            _controller.pause();
+            _hideTimer?.cancel(); // Cancel hide timer when pausing
+          } else {
+            _controller.play();
+            // Restart hide timer when playing
+            _hideTimer?.cancel();
+            if (_isVisible) {
+              _hideTimer = Timer(const Duration(seconds: 3), () {
+                if (mounted) {
+                  setState(() {
+                    _isVisible = false;
+                  });
+                }
+              });
+            }
+          }
         });
       },
     );
   }
 
   Widget _buildBottomBar(BuildContext context) {
-    return AbsorbPointer(
-      absorbing: !_isVisible, // Disable seek bar when controls are hidden
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            VideoProgressIndicator(
-              _controller,
-              allowScrubbing: true,
-              colors: VideoProgressColors(
-                playedColor: const Color(0xFF8A55FE),
-                bufferedColor: Colors.grey[600]!,
-                backgroundColor: Colors.grey[800]!,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          VideoProgressIndicator(
+            _controller,
+            allowScrubbing: true,
+            colors: VideoProgressColors(
+              playedColor: const Color(0xFF8A55FE),
+              bufferedColor: Colors.grey[600]!,
+              backgroundColor: Colors.grey[800]!,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              ValueListenableBuilder(
+                valueListenable: _controller,
+                builder: (context, VideoPlayerValue value, child) {
+                  return Text(
+                    _formatDuration(value.position),
+                    style: const TextStyle(color: Colors.white),
+                  );
+                },
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                ValueListenableBuilder(
-                  valueListenable: _controller,
-                  builder: (context, VideoPlayerValue value, child) {
-                    return Text(
-                      _formatDuration(value.position),
-                      style: const TextStyle(color: Colors.white),
-                    );
-                  },
-                ),
-                const Text(" / ", style: TextStyle(color: Colors.white70)),
-                Text(
-                  _formatDuration(_controller.value.duration),
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
+              const Text(" / ", style: TextStyle(color: Colors.white70)),
+              Text(
+                _formatDuration(_controller.value.duration),
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
