@@ -234,8 +234,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Widget _buildSkipButton({required bool isForward}) {
     return IconButton(
       icon: Icon(isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: Colors.white, size: 36),
-      onPressed: () async {
-        // Tandai bahwa kita sedang melakukan seek
+      // Disable button while a seek is in progress
+      onPressed: _isSeeking ? null : () async {
         setState(() {
           _isSeeking = true;
         });
@@ -245,20 +245,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             ? currentPosition + const Duration(seconds: 10)
             : currentPosition - const Duration(seconds: 10);
         
-        // Langsung seek tanpa animasi pause
         await _controller.seekTo(newPosition);
         
-        // Setelah seek selesai, reset flag seeking
         if (mounted) {
           setState(() {
             _isSeeking = false;
           });
         }
         
-        // Memastikan sistem UI mode tetap immersive sticky
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         
-        // Reset timer when skipping
         _hideTimer?.cancel();
         if (_isVisible && _controller.value.isPlaying) {
           _hideTimer = Timer(const Duration(seconds: 3), () {
@@ -275,21 +271,26 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   Widget _buildPlayPauseButton() {
     return IconButton(
-      icon: Icon(
-        _controller.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
-        color: Colors.white, size: 60,
-      ),
-      onPressed: () {
+      icon: _isSeeking
+          ? const SizedBox(
+              width: 60,
+              height: 60,
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3.0),
+            )
+          : Icon(
+              _controller.value.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+              color: Colors.white, size: 60,
+            ),
+      // Disable button while a seek is in progress
+      onPressed: _isSeeking ? null : () {
         setState(() {
           if (_controller.value.isPlaying) {
             _controller.pause();
-            _hideTimer?.cancel(); // Cancel hide timer when pausing
-            _isSeeking = false; // Reset seeking flag when pausing
+            _hideTimer?.cancel();
           } else {
             _controller.play();
-            // Restart hide timer when playing
             _hideTimer?.cancel();
-            if (_isVisible && !_isSeeking) {
+            if (_isVisible) {
               _hideTimer = Timer(const Duration(seconds: 3), () {
                 if (mounted) {
                   setState(() {
@@ -299,8 +300,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               });
             }
           }
-          
-          // Memastikan sistem UI mode tetap immersive sticky
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         });
       },
@@ -343,7 +342,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               IconButton(
                 icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
                 onPressed: () {
-                  // Exit fullscreen and return to previous screen
                   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
                   Navigator.of(context).pop();
                 },
