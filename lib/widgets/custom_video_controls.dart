@@ -1,5 +1,6 @@
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:async';
 
@@ -36,6 +37,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   @override
   void initState() {
     super.initState();
+    print('CustomVideoControls initState. hasPrevEpisode: ${widget.hasPrevEpisode}, hasNextEpisode: ${widget.hasNextEpisode}');
   }
 
   @override
@@ -44,6 +46,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     _chewieController = ChewieController.of(context);
     _controller = _chewieController.videoPlayerController;
     _controller.addListener(_playListener);
+    
+    // Memastikan sistem UI mode tetap immersive sticky
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
@@ -65,6 +70,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         }
       });
     }
+    
+    // Memastikan sistem UI mode tetap immersive sticky
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   void _toggleControls() {
@@ -73,6 +81,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       
       // Cancel any pending hide timer when manually toggling
       _hideTimer?.cancel();
+      
+      // Memastikan sistem UI mode tetap immersive sticky
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       
       // If showing controls and video is playing, start a new timer to hide them
       if (_isVisible && _controller.value.isPlaying) {
@@ -106,12 +117,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildControls(BuildContext context) {
-    return Column(
-      children: [
-        _buildTopBar(context),
-        Expanded(child: _buildMiddleControls()),
-        _buildBottomBar(context),
-      ],
+    final padding = MediaQuery.of(context).padding;
+    
+    return Padding(
+      padding: padding,
+      child: Column(
+        children: [
+          _buildTopBar(context),
+          Expanded(child: _buildMiddleControls()),
+          _buildBottomBar(context),
+        ],
+      ),
     );
   }
 
@@ -181,6 +197,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   Widget _buildPrevEpisodeButton() {
     final String episodeLabel = _extractEpisodeNumber(widget.prevEpisodeTitle);
+    print('Building Prev Episode Button. hasPrevEpisode: ${widget.hasPrevEpisode}, label: $episodeLabel');
     
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -198,6 +215,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   Widget _buildNextEpisodeButton() {
     final String episodeLabel = _extractEpisodeNumber(widget.nextEpisodeTitle);
+    print('Building Next Episode Button. hasNextEpisode: ${widget.hasNextEpisode}, label: $episodeLabel');
     
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -227,6 +245,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         });
         
         await _controller.seekTo(newPosition);
+        
+        // Memastikan sistem UI mode tetap immersive sticky
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         
         // Reset timer when skipping
         _hideTimer?.cancel();
@@ -268,6 +289,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               });
             }
           }
+          
+          // Memastikan sistem UI mode tetap immersive sticky
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         });
       },
     );
@@ -309,6 +333,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               IconButton(
                 icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
                 onPressed: () {
+                  // Exit fullscreen and return to previous screen
+                  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
                   Navigator.of(context).pop();
                 },
               ),
