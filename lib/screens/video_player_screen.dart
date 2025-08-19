@@ -105,7 +105,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _chewieController?.dispose();
 
     try {
-      final fullUrl = Uri.parse(ApiService.baseUrl + stream.streamUrl);
+      // Construct the full URL with the correct scheme
+      final fullUrl = Uri.parse("http://${ApiService.baseUrl}${stream.streamUrl}");
+      print("Attempting to play URL: $fullUrl"); // Debugging line
       
       _videoPlayerController = VideoPlayerController.networkUrl(fullUrl);
       await _videoPlayerController!.initialize();
