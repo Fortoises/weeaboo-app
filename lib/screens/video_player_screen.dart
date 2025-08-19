@@ -179,8 +179,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   StreamSource? _findStreamForQuality(String quality) {
     for (var serverName in _serverPriority) {
       try {
-        // Make comparison case-insensitive to avoid mismatches like 'Blogger' vs 'blogger'
-        return _allStreams.firstWhere((s) => s.quality == quality && s.server.toLowerCase() == serverName.toLowerCase());
+        // Corrected to use s.provider for matching
+        return _allStreams.firstWhere((s) => s.quality == quality && s.provider.toLowerCase() == serverName.toLowerCase());
       } catch (e) {
         // Not found, continue
       }

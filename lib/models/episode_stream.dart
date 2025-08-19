@@ -22,15 +22,16 @@ class EpisodeStream {
 
 class StreamSource {
   final String server;
+  final String provider;
   final String streamUrl;
   final String quality;
 
-  StreamSource({required this.server, required this.streamUrl, required this.quality});
+  StreamSource({required this.server, required this.provider, required this.streamUrl, required this.quality});
 
   factory StreamSource.fromJson(Map<String, dynamic> json) {
     return StreamSource(
       server: json['server'] ?? 'Unknown Server',
-      // API now provides 'stream_url' which is a relative path
+      provider: json['provider'] ?? '',
       streamUrl: json['stream_url'] ?? '',
       quality: json['quality'] ?? 'N/A',
     );
